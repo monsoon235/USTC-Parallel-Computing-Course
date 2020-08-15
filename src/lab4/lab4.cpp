@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
         std::cout << std::setiosflags(std::ios::fixed);
         std::cout << "PSRS 排序\n";
-        std::cout << "线程数\t数组长度\t模拟时间(s)\t结果检查\n";
+        std::cout << "线程数\t数组长度\t用时(ms)\t结果检查\n";
     }
 
     auto time = PSRS(arr, arr_len);
