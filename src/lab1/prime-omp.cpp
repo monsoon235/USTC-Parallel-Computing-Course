@@ -71,22 +71,19 @@ std::tuple<int, double> count_prime_omp(int max, int thread_num) {
     return std::make_tuple(count, end_time - start_time);
 }
 
-int main() {
-    auto thread_num_list = {1, 2, 4, 8};
-    auto max_list = {1000, 10000, 100000, 500000};
+int main(int argc, char *argv[]) {
+
+    auto thread_num = std::stoi(argv[1]);
+    auto max = std::stoi(argv[2]);
 
     std::cout << std::setiosflags(std::ios::fixed);
     std::cout << "OpenMP 统计素数个数:\n";
     std::cout << "线程数\t最大数\t用时(ms)\t结果\n";
-    for (auto thread_num:thread_num_list) {
-        for (auto max:max_list) {
-            int count;
-            double time;
-            std::tie(count, time) = count_prime_omp(max, thread_num);
-            std::cout << thread_num << "\t" << max << '\t'
-                      << std::setprecision(4) << time * 1e3 << '\t'
-                      << count << '\n';
-        }
-    }
+    int count;
+    double time;
+    std::tie(count, time) = count_prime_omp(max, thread_num);
+    std::cout << thread_num << "\t" << max << '\t'
+              << std::setprecision(4) << time * 1e3 << '\t'
+              << count << '\n';
     return 0;
 }

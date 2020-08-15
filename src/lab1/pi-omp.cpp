@@ -24,20 +24,18 @@ std::tuple<double, double> calculate_pi_omp(int max_iteration, int thread_num) {
     return std::make_tuple(pi, end_time - start_time);
 }
 
-int main() {
-    auto thread_num_list = {1, 2, 4, 8};
-    auto max_iteration_list = {1000, 10000, 50000, 100000};
+int main(int argc, char *argv[]) {
+
+    auto thread_num = std::stoi(argv[1]);
+    auto max_iteration = std::stoi(argv[2]);
+
     std::cout << std::setiosflags(std::ios::fixed);
     std::cout << "OpenMP 计算 pi:\n";
     std::cout << "线程数\t迭代次数\t用时(ms)\t结果\n";
-    for (auto thread_num:thread_num_list) {
-        for (auto max_iteration:max_iteration_list) {
-            double pi, time;
-            std::tie(pi, time) = calculate_pi_omp(max_iteration, thread_num);
-            std::cout << thread_num << "\t" << max_iteration << '\t'
-                      << std::setprecision(4) << time * 1e3 << '\t'
-                      << std::setprecision(15) << pi << '\n';
-        }
-    }
+    double pi, time;
+    std::tie(pi, time) = calculate_pi_omp(max_iteration, thread_num);
+    std::cout << thread_num << "\t" << max_iteration << '\t'
+              << std::setprecision(4) << time * 1e3 << '\t'
+              << std::setprecision(15) << pi << '\n';
     return 0;
 }

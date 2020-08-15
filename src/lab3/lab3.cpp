@@ -90,7 +90,7 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
             positions[j].x += velocities[j].vx * time_granularity;
             positions[j].y += velocities[j].vy * time_granularity;
         }
-        // 同步状态
+        // 同步位置
         MPI_Allgatherv(MPI_IN_PLACE, lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
                        MPI_COMM_WORLD);
         // 速度无需同步
