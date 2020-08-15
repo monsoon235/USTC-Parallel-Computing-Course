@@ -23,7 +23,7 @@ double simulate_cars(Car cars[], int car_num, int max_iteration, int v_max, doub
     int lengths[size];
     for (int i = 0; i < size; ++i) {
         offsets[i] = rank * car_num / size;
-        lengths[i] = ((i == size - 1) ? car_num : (rank + 1) * car_num / size) - offsets[i];
+        lengths[i] = (rank + 1) * car_num / size - offsets[i];
     }
 
     int start_index = offsets[rank];

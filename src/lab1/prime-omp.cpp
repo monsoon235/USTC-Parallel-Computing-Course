@@ -5,51 +5,64 @@
 #include <omp.h>
 
 
-std::tuple<int, double> count_prime_omp(int max, int thread_num) {
-
-    if (max < 1) {
-        return std::make_tuple(0, 0);
-    }
-
-    double start_time = omp_get_wtime();
-
-    omp_set_num_threads(thread_num);
-
-    auto is_prime = new bool[max + 1];
+// 串行算法，小规模
+void mark_prime(bool is_prime[], int max) {
     std::fill_n(is_prime, max + 1, true);
     is_prime[0] = false;
     is_prime[1] = false;
-
-    // 筛法
-    // cache 不友好
-    int stop = std::sqrt(max);
-#pragma omp parallel for
+    double stop = std::sqrt(max);
     for (int i = 2; i <= stop; i++) {
-        if (is_prime[i]) { // 由于 bool 只有 1 字节，它的读取天然保障是原子的，不需要再加锁
-            for (int j = i * 2; j <= max; j += i) {
+        if (is_prime[i]) {
+            for (int j = i * 2; j < max; j += i) {
                 is_prime[j] = false;
             }
         }
     }
+}
 
-    // 只统计奇数
-    int count = 0;
-#pragma omp parallel for reduction(+:count)
-    for (int i = 0; i < thread_num; i++) {
-        int start_index = i * (max + 1) / thread_num;
-        start_index = start_index / 2 * 2 + 1;
-        int end_index = (i + 1) * (max + 1) / thread_num;
-        if (i == thread_num - 1) {
-            end_index = max + 1;
+std::tuple<int, double> count_prime_omp(int max, int thread_num) {
+    double start_time = omp_get_wtime();
+    omp_set_num_threads(thread_num);
+
+    auto is_prime = new bool[max + 1];
+    std::fill_n(is_prime, max + 1, true);
+
+    // 先找出 1~√max 的素数
+    int stop = std::sqrt(max);
+    mark_prime(is_prime, stop);
+
+    // 筛法
+#pragma omp parallel
+    {
+        int rank = omp_get_thread_num(); // 线程 id
+        int size = omp_get_num_threads(); // 线程数
+        int start_index = rank * (max + 1) / size;
+        int end_index = (rank + 1) * (max + 1) / size;
+        for (int i = 2; i <= stop; i++) {
+            if (is_prime[i]) {
+                // start_index 起第一个 i 的倍数
+                int start = (start_index % i == 0) ? start_index : start_index + (i - start_index % i);
+                for (int j = std::max(start, 2 * i); j < end_index; j += i) {
+                    is_prime[j] = false;
+                }
+            }
         }
+    }
+
+    // 统计
+    int count = max >= 2 ? 1 : 0;
+#pragma omp parallel reduction(+:count)
+    {
+        int rank = omp_get_thread_num(); // 线程 id
+        int size = omp_get_num_threads(); // 线程数
+        int start_index = rank * (max + 1) / size;
+        start_index = start_index / 2 * 2 + 1; // 只统计奇数
+        int end_index = (rank + 1) * (max + 1) / size;
         for (int j = start_index; j < end_index; j += 2) {
             if (is_prime[j]) {
                 count++;
             }
         }
-    }
-    if (max >= 2) {
-        count++;
     }
 
     delete[] is_prime;
