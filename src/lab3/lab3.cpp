@@ -1,6 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <fstream>
 #include <cmath>
 #include <cassert>
 #include <mpi.h>
@@ -62,7 +63,7 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
     int element_lens[] = {1, 1};
     MPI_Aint element_offsets[2];
     MPI_Get_address(&positions[0].x, &element_offsets[0]);
-    MPI_Get_address(&positions[1].y, &element_offsets[1]);
+    MPI_Get_address(&positions[0].y, &element_offsets[1]);
     element_offsets[1] -= element_offsets[0];
     element_offsets[0] = 0;
     MPI_Datatype element_types[] = {MPI_DOUBLE, MPI_DOUBLE};
@@ -75,8 +76,8 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
     int offsets[size];
     int lengths[size];
     for (int i = 0; i < size; ++i) {
-        offsets[i] = rank * body_num / size;
-        lengths[i] = (rank + 1) * body_num / size - offsets[i];
+        offsets[i] = i * body_num / size;
+        lengths[i] = (i + 1) * body_num / size - offsets[i];
     }
 
     int start_index = offsets[rank];
@@ -106,9 +107,11 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
         MPI_Gatherv(MPI_IN_PLACE, lengths[rank], MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY, 0,
                     MPI_COMM_WORLD);
     } else {
-        MPI_Gatherv(positions, lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION, 0,
+        MPI_Gatherv(positions + offsets[rank], lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
+                    0,
                     MPI_COMM_WORLD);
-        MPI_Gatherv(velocities, lengths[rank], MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY, 0,
+        MPI_Gatherv(velocities + offsets[rank], lengths[rank], MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY,
+                    0,
                     MPI_COMM_WORLD);
     }
 
@@ -162,7 +165,20 @@ int main(int argc, char *argv[]) {
                   << body_num << '\t'
                   << total_time << '\t'
                   << std::setprecision(4) << time * 1e3 << '\n';
-        // todo 输出到文件
+        // 输出到文件
+        std::ofstream file;
+        file.open(std::string("lab3_") + argv[1] + "_" + argv[2] + "_" + argv[3] + ".txt", std::ios::out);
+        file << "body_num = " << body_num << std::endl;
+        file << "total_time = " << total_time << std::endl;
+        file << "time_granularity = " << time_granularity << std::endl;
+        file << "mass\tposition\tvelocity" << std::endl;
+        for (int i = 0; i < body_num; ++i) {
+            file << masses[i] << '\t'
+                 << '(' << positions[i].x << ',' << positions[i].y << ')' << '\t'
+                 << '(' << velocities[i].vx << ',' << velocities[i].vy << ')' << std::endl;
+        }
+        file.flush();
+        file.close();
     }
 
     MPI_Finalize();

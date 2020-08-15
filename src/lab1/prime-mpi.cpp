@@ -37,7 +37,7 @@ std::tuple<int, double> count_prime_mpi(int max) {
     mark_prime(is_prime, stop);
 
     // 数据分段
-    int start_index = rank * (max + 1) / size;
+    int start_index = std::max(rank * (max + 1) / size, stop + 1);
     int end_index = (rank + 1) * (max + 1) / size;
     for (int i = 2; i <= stop; i++) {
         if (is_prime[i]) {
@@ -50,7 +50,7 @@ std::tuple<int, double> count_prime_mpi(int max) {
     }
 
     // 统计
-    start_index = start_index / 2 * 2 + 1;// 只统计奇数
+    start_index = (rank * (max + 1) / size) / 2 * 2 + 1;// 只统计奇数
     int count = 0;
     int count_local = 0;
     for (int i = start_index; i < end_index; i += 2) {

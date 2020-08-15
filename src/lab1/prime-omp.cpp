@@ -36,7 +36,7 @@ std::tuple<int, double> count_prime_omp(int max, int thread_num) {
     {
         int rank = omp_get_thread_num(); // 线程 id
         int size = omp_get_num_threads(); // 线程数
-        int start_index = rank * (max + 1) / size;
+        int start_index = std::max(rank * (max + 1) / size, stop + 1);
         int end_index = (rank + 1) * (max + 1) / size;
         for (int i = 2; i <= stop; i++) {
             if (is_prime[i]) {
