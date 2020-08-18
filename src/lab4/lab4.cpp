@@ -65,7 +65,10 @@ double PSRS(int arr[], int arr_len) {
     MPI_Gather(sample, size, MPI_INT, sample_all, size, MPI_INT, 0, MPI_COMM_WORLD);
     if (rank == 0) {
         std::sort(sample_all, sample_all + size * size);
-        std::sample(sample_all, sample_all + size * size, pivot, size - 1, std::mt19937{std::random_device{}()});
+        // 此处需要均匀划分
+        for (int i = 0; i < size - 1; ++i) {
+            pivot[i] = sample_all[(i + 1) * size];
+        }
     }
     MPI_Bcast(pivot, size - 1, MPI_INT, 0, MPI_COMM_WORLD);
 
