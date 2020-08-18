@@ -45,7 +45,7 @@ def lab1_pi():
 
 def lab1_prime():
     max_list = [1000, 10000, 100000, 500000]
-    print('lab1 pi omp')
+    print('lab1 prime omp')
     print('规模\\进程数\t' + '\t'.join(map(str, thread_num_list)))
     for max in max_list:
         print(max, end='\t')
@@ -58,7 +58,7 @@ def lab1_prime():
                 time_1_thread = time
             print(f'{time / repeat_time}/{time_1_thread / time}', end='\t')
         print()
-    print('lab1 pi mpi')
+    print('lab1 prime mpi')
     print('规模\\进程数\t' + '\t'.join(map(str, thread_num_list)))
     for max in max_list:
         print(max, end='\t')
