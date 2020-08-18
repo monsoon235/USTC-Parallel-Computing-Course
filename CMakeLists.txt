@@ -23,3 +23,4 @@ target_link_libraries(lab3 PUBLIC OpenMP::OpenMP_CXX ${MPI_CXX_LIBRARIES})
 target_link_libraries(lab4 PUBLIC OpenMP::OpenMP_CXX ${MPI_CXX_LIBRARIES})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
