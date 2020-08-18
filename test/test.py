@@ -3,7 +3,7 @@ from typing import List
 
 repeat_time: int = 20
 
-thread_num_list = [1, 2, 4, 8, 16, 32]
+thread_num_list = [1, 2, 4, 8]
 
 
 def execute(cmd: str) -> List[str]:
@@ -77,7 +77,7 @@ def lab2():
     print('lab2')
     car_num_list = [100000, 500000, 1000000]
     max_iter_list = [2000, 500, 300]
-    print('(车辆数量,周期数)\\进程数' + '\t'.join(map(str, thread_num_list)))
+    print('(车辆数量,周期数)\\进程数\t' + '\t'.join(map(str, thread_num_list)))
     for car_num, max_iter in zip(car_num_list, max_iter_list):
         print((car_num, max_iter), end='\t')
         for thread_num in thread_num_list:
@@ -96,7 +96,7 @@ def lab3():
     body_num_list = [64, 256]
     total_time = 100
     time_granularity = 0.0001
-    print('(小球数,模拟时间,时间粒度)\\进程数' + '\t'.join(map(str, thread_num_list)))
+    print('(小球数,模拟时间,时间粒度)\\进程数\t' + '\t'.join(map(str, thread_num_list)))
     for body_num in body_num_list:
         print((body_num, total_time, time_granularity), end='\t')
         for thread_num in thread_num_list:
@@ -113,7 +113,7 @@ def lab3():
 def lab4():
     print('lab4')
     arr_len_list = [1e6, 2e6, 5e6, 1e7]
-    print('数组长度\\进程数' + '\t'.join(map(str, thread_num_list)))
+    print('数组长度\\进程数\t' + '\t'.join(map(str, thread_num_list)))
     for arr_len in arr_len_list:
         print(arr_len, end='\t')
         for thread_num in thread_num_list:

@@ -21,8 +21,6 @@ struct Velocity {
 
 struct Acceleration {
     double ax;
-
-
     double ay;
 };
 
@@ -90,7 +88,7 @@ double n_body(double masses[], Position positions[], Velocity velocities[],
 
     auto positions_local = positions + offsets[rank]; // 无需单独的 position_local
 
-    // velocity 数据无需传送
+    // velocity 数据无需每次迭代传送
     auto velocities_local = new Velocity[local_len];
     MPI_Scatterv(velocities, lengths, offsets, MPI_VELOCITY, velocities_local, local_len, MPI_VELOCITY, 0,
                  MPI_COMM_WORLD);
@@ -112,14 +110,15 @@ double n_body(double masses[], Position positions[], Velocity velocities[],
     }
 
     // 收集位置信息
-    if (rank == 0) {
-        MPI_Gatherv(MPI_IN_PLACE, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION, 0,
-                    MPI_COMM_WORLD);
-    } else {
-        MPI_Gatherv(positions_local, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
-                    0,
-                    MPI_COMM_WORLD);
-    }
+    // 位置信息在循环中已经被同步了，不需要再收集
+    // if (rank == 0) {
+    //     MPI_Gatherv(MPI_IN_PLACE, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION, 0,
+    //                 MPI_COMM_WORLD);
+    // } else {
+    //     MPI_Gatherv(positions_local, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
+    //                 0,
+    //                 MPI_COMM_WORLD);
+    // }
     // 收集速度信息
     MPI_Gatherv(velocities_local, local_len, MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY,
                 0,
