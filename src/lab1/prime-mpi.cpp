@@ -10,7 +10,9 @@
 void mark_prime(bool is_prime[], int max) {
     std::fill_n(is_prime, max + 1, true);
     is_prime[0] = false;
-    is_prime[1] = false;
+    if (max > 1) {
+        is_prime[1] = false;
+    }
     double stop = std::sqrt(max);
     for (int i = 2; i <= stop; i++) {
         if (is_prime[i]) {
@@ -29,40 +31,51 @@ std::tuple<int, double> count_prime_mpi(int max) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    auto is_prime = new bool[max + 1];
-    std::fill_n(is_prime, max + 1, true);
+    int offset = rank * (max + 1) / size;
+    int length = (rank + 1) * (max + 1) / size - offset;
 
     // 先找出 1~√max 的素数
-    int stop = std::sqrt(max);
-    mark_prime(is_prime, stop);
+    int max_sqrt = std::sqrt(max);
+    auto is_prime_before_sqrt = new bool[max_sqrt + 1];
+    std::fill_n(is_prime_before_sqrt, max_sqrt + 1, true);
+    mark_prime(is_prime_before_sqrt, max_sqrt);
 
-    // 数据分段
-    int start_index = std::max(rank * (max + 1) / size, stop + 1);
-    int end_index = (rank + 1) * (max + 1) / size;
-    for (int i = 2; i <= stop; i++) {
-        if (is_prime[i]) {
-            // start_index 起第一个 i 的倍数
-            int start = (start_index % i == 0) ? start_index : start_index + (i - start_index % i);
-            for (int j = std::max(start, 2 * i); j < end_index; j += i) {
+    auto is_prime = new bool[length];  // 每个线程负责 [offset, offset+length) 的部分
+    std::fill_n(is_prime, length, true);
+    // 去除 0 1
+    if (offset <= 0 && offset + length > 0) {
+        is_prime[0 - offset] = false;
+    }
+    if (offset <= 1 && offset + length > 1) {
+        is_prime[1 - offset] = false;
+    }
+
+    // 筛法
+    for (int i = 2; i <= max_sqrt; i++) {
+        if (is_prime_before_sqrt[i]) {
+            int start = (offset % i == 0) ? 0 : (i - offset % i);
+            int real_start = std::max(start, 2 * i - offset);
+            for (int j = real_start; j < length; j += i) {
                 is_prime[j] = false;
             }
         }
     }
 
-    // 统计
-    start_index = (rank * (max + 1) / size) / 2 * 2 + 1;// 只统计奇数
-    int count = 0;
+    // 统计，只统计奇数
     int count_local = 0;
-    for (int i = start_index; i < end_index; i += 2) {
+    int start = 1 - offset % 2;
+    for (int i = start; i < length; i += 2) {
         if (is_prime[i]) {
             count_local++;
         }
     }
+    int count = 0;
     MPI_Reduce(&count_local, &count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     if (max >= 2) {
         count++;
     }
 
+    delete[] is_prime_before_sqrt;
     delete[] is_prime;
 
     double end_time = MPI_Wtime();

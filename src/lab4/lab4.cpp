@@ -5,6 +5,31 @@
 #include <random>
 #include <mpi.h>
 
+// 归并
+void multi_merge(int arr[], int arr_len, int offsets[], int size, int output[]) {
+    int *starts[size];
+    int *ends[size];
+    for (int i = 0; i < size; ++i) {
+        starts[i] = arr + offsets[i];
+    }
+    ends[size - 1] = arr + arr_len;
+    for (int i = 0; i < size - 1; ++i) {
+        ends[i] = starts[i + 1];
+    }
+    for (int i = 0; i < arr_len; ++i) {
+        int min = 0;
+        while (starts[min] >= ends[min]) {
+            min++;
+        }
+        for (int j = min + 1; j < size; ++j) {
+            if (starts[j] < ends[j] && *starts[j] < *starts[min]) {
+                min = j;
+            }
+        }
+        output[i] = *starts[min];
+        starts[min]++;
+    }
+}
 
 double PSRS(int arr[], int arr_len) {
     double start_time = MPI_Wtime();
@@ -48,41 +73,44 @@ double PSRS(int arr[], int arr_len) {
     pivot[-1] = local[0];
     pivot[size - 1] = local[local_len - 1] + 1;
 
-    int part_start[size]; // 每一部分的开始位置
+    int part_offset[size]; // 每一部分的开始位置
     int part_len[size];  // 每一部分的长度
 
-    part_start[0] = 0;
+    part_offset[0] = 0;
     int now_index = 0;
     for (int i = 0; i < size; ++i) {
         while (now_index < local_len && pivot[i - 1] <= local[now_index] && local[now_index] < pivot[i]) {
             now_index++;
         }
-        part_len[i] = now_index - part_start[i];
+        part_len[i] = now_index - part_offset[i];
         if (i + 1 < size) {
-            part_start[i + 1] = now_index;
+            part_offset[i + 1] = now_index;
         }
     }
 
-    // 发送每个划分起始位置和划分长度
+    // 发送每个划分长度
     for (int i = 0; i < size; ++i) {
         MPI_Gather(&part_len[i], 1, MPI_INT, lengths, 1, MPI_INT, i, MPI_COMM_WORLD);
     }
-    local_len = std::accumulate(lengths, lengths + size, 0);
-    auto local_new = new int[local_len];
     offsets[0] = 0;
     for (int i = 1; i < size; ++i) {
         offsets[i] = offsets[i - 1] + lengths[i - 1];
     }
+
+    local_len = std::accumulate(lengths, lengths + size, 0);
+    auto local_new = new int[local_len];
+
     // 把每个线程的第 i 个划分发送到第 i 个线程
     for (int i = 0; i < size; ++i) {
-        MPI_Gatherv(local + part_start[i], part_len[i], MPI_INT, local_new, lengths, offsets, MPI_INT, i,
+        MPI_Gatherv(local + part_offset[i], part_len[i], MPI_INT, local_new, lengths, offsets, MPI_INT, i,
                     MPI_COMM_WORLD);
     }
-    delete[] local;
 
-    // 每个线程重新排序
-    local = local_new;
-    std::sort(local, local + local_len);
+    // 每个线程重新排序，可以用归并的方法
+    delete[] local;
+    local = new int[local_len];
+    multi_merge(local_new, local_len, offsets, size, local);
+    delete[] local_new;
 
     // 所有长度数据汇总到 root
     MPI_Gather(&local_len, 1, MPI_INT, lengths, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -102,15 +130,6 @@ double PSRS(int arr[], int arr_len) {
     return end_time - start_time;
 }
 
-bool check(const int arr[], int arr_len) {
-    for (int i = 0; i < arr_len - 1; ++i) {
-        if (arr[i] > arr[i + 1]) {
-            return false;
-        }
-    }
-    return true;
-}
-
 int main(int argc, char *argv[]) {
 
     auto arr_len = std::stoi(argv[1]);
@@ -121,8 +140,9 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    auto arr = new int[arr_len]; // rank=0 才使用
+    int *arr = nullptr;
     if (rank == 0) {
+        arr = new int[arr_len];
         // 初始化
         std::generate_n(arr, arr_len, []() {
             static int i = 0;
@@ -144,7 +164,7 @@ int main(int argc, char *argv[]) {
         std::cout << size << '\t'
                   << arr_len << '\t'
                   << std::setprecision(4) << time * 1e3 << '\t'
-                  << (check(arr, arr_len) ? "正确" : "错误") << std::endl;
+                  << (std::is_sorted(arr, arr + arr_len) ? "正确" : "错误") << std::endl;
     }
 
     MPI_Finalize();

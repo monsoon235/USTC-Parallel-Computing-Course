@@ -28,17 +28,17 @@ std::tuple<int, double> count_prime_omp(int max, int thread_num) {
     std::fill_n(is_prime, max + 1, true);
 
     // 先找出 1~√max 的素数
-    int stop = std::sqrt(max);
-    mark_prime(is_prime, stop);
+    int max_sqrt = std::sqrt(max);
+    mark_prime(is_prime, max_sqrt);
 
     // 筛法
 #pragma omp parallel
     {
         int rank = omp_get_thread_num(); // 线程 id
         int size = omp_get_num_threads(); // 线程数
-        int start_index = std::max(rank * (max + 1) / size, stop + 1);
+        int start_index = std::max(rank * (max + 1) / size, max_sqrt + 1);
         int end_index = (rank + 1) * (max + 1) / size;
-        for (int i = 2; i <= stop; i++) {
+        for (int i = 2; i <= max_sqrt; i++) {
             if (is_prime[i]) {
                 // start_index 起第一个 i 的倍数
                 int start = (start_index % i == 0) ? start_index : start_index + (i - start_index % i);
@@ -82,7 +82,8 @@ int main(int argc, char *argv[]) {
     int count;
     double time;
     std::tie(count, time) = count_prime_omp(max, thread_num);
-    std::cout << thread_num << "\t" << max << '\t'
+    std::cout << thread_num << "\t"
+              << max << '\t'
               << std::setprecision(4) << time * 1e3 << '\t'
               << count << '\n';
     return 0;

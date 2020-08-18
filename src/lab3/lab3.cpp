@@ -19,39 +19,34 @@ struct Velocity {
     double vy;
 };
 
-struct Force {
-    double fx;
-    double fy;
+struct Acceleration {
+    double ax;
+
+
+    double ay;
 };
 
 // 计算小球的总受力
-inline Force
-compute_force(const double masses[], const Position positions[], const int self_index, const int body_num) {
-    Force force{0, 0};
-    double self_mass = masses[self_index];
+inline Acceleration
+compute_acceleration(const double masses[], const Position positions[], int self_index, int body_num) {
+    Acceleration a{0, 0};
     double self_x = positions[self_index].x;
     double self_y = positions[self_index].y;
-    for (int i = 0; i < self_index; ++i) {
-        double dx = positions[i].x - self_x;
-        double dy = positions[i].y - self_y;
-        double f = G * self_mass * masses[i] / (dx * dx + dy * dy);
-        double distance = std::sqrt(dx * dx + dy * dy);
-        force.fx += dx / distance * f;
-        force.fy += dy / distance * f;
+    for (int i = 0; i < body_num; i++) {
+        if (i != self_index) {
+            double dx = positions[i].x - self_x;
+            double dy = positions[i].y - self_y;
+            double f = G * masses[i] / (dx * dx + dy * dy);
+            double distance = std::sqrt(dx * dx + dy * dy);
+            a.ax += dx / distance * f;
+            a.ay += dy / distance * f;
+        }
     }
-    for (int i = self_index + 1; i < body_num; ++i) {
-        double dx = positions[i].x - self_x;
-        double dy = positions[i].y - self_y;
-        double f = G * self_mass * masses[i] / (dx * dx + dy * dy);
-        double distance = std::sqrt(dx * dx + dy * dy);
-        force.fx += dx / distance * f;
-        force.fy += dy / distance * f;
-    }
-    return force;
+    return a;
 }
 
 
-double n_body(const double masses[], Position positions[], Velocity velocities[],
+double n_body(double masses[], Position positions[], Velocity velocities[],
               int body_num, double total_time, double time_granularity) {
     double start_time = MPI_Wtime();
 
@@ -59,11 +54,13 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // 创建 MPI_POSITION, MPI_VELOCITY
     MPI_Datatype MPI_POSITION, MPI_VELOCITY;
     int element_lens[] = {1, 1};
     MPI_Aint element_offsets[2];
-    MPI_Get_address(&positions[0].x, &element_offsets[0]);
-    MPI_Get_address(&positions[0].y, &element_offsets[1]);
+    Position position_tmp{};
+    MPI_Get_address(&position_tmp.x, &element_offsets[0]);
+    MPI_Get_address(&position_tmp.y, &element_offsets[1]);
     element_offsets[1] -= element_offsets[0];
     element_offsets[0] = 0;
     MPI_Datatype element_types[] = {MPI_DOUBLE, MPI_DOUBLE};
@@ -80,40 +77,59 @@ double n_body(const double masses[], Position positions[], Velocity velocities[]
         lengths[i] = (i + 1) * body_num / size - offsets[i];
     }
 
-    int start_index = offsets[rank];
-    int end_index = offsets[rank] + lengths[rank];
+    int local_len = lengths[rank];
 
+    // mass 数据一次性广播即可
+    // 需要传送的是 position 数据
+    if (rank != 0) {
+        masses = new double[body_num];
+        positions = new Position[body_num];
+    }
+    MPI_Bcast(masses, body_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(positions, body_num, MPI_POSITION, 0, MPI_COMM_WORLD);
+
+    auto positions_local = positions + offsets[rank]; // 无需单独的 position_local
+
+    // velocity 数据无需传送
+    auto velocities_local = new Velocity[local_len];
+    MPI_Scatterv(velocities, lengths, offsets, MPI_VELOCITY, velocities_local, local_len, MPI_VELOCITY, 0,
+                 MPI_COMM_WORLD);
+
+    // 计算
     for (int t = 0; t < total_time / time_granularity; t++) {
-        for (int j = start_index; j < end_index; ++j) {
-            auto force = compute_force(masses, positions, j, body_num);
-            velocities[j].vx += force.fx / masses[j] * time_granularity;
-            velocities[j].vy += force.fy / masses[j] * time_granularity;
-            positions[j].x += velocities[j].vx * time_granularity;
-            positions[j].y += velocities[j].vy * time_granularity;
+        for (int i = 0; i < local_len; i++) {
+            auto a = compute_acceleration(masses, positions, i + offsets[rank], body_num);
+            positions_local[i].x += velocities_local[i].vx * time_granularity
+                                    + 0.5 * a.ax * time_granularity * time_granularity;
+            positions_local[i].y += velocities_local[i].vy * time_granularity
+                                    + 0.5 * a.ay * time_granularity * time_granularity;
+            velocities_local[i].vx += a.ax * time_granularity;
+            velocities_local[i].vy += a.ay * time_granularity;
         }
         // 同步位置
-        MPI_Allgatherv(MPI_IN_PLACE, lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
+        MPI_Allgatherv(MPI_IN_PLACE, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
                        MPI_COMM_WORLD);
-        // 速度无需同步
-//        MPI_Allgatherv(MPI_IN_PLACE, lengths[rank], MPI_VELOCITY, velocities, lengths, offsets,
-//                       MPI_VELOCITY,
-//                       MPI_COMM_WORLD);
     }
 
-    // 收集结果
+    // 收集位置信息
     if (rank == 0) {
-        MPI_Gatherv(MPI_IN_PLACE, lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION, 0,
-                    MPI_COMM_WORLD);
-        MPI_Gatherv(MPI_IN_PLACE, lengths[rank], MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY, 0,
+        MPI_Gatherv(MPI_IN_PLACE, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION, 0,
                     MPI_COMM_WORLD);
     } else {
-        MPI_Gatherv(positions + offsets[rank], lengths[rank], MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
-                    0,
-                    MPI_COMM_WORLD);
-        MPI_Gatherv(velocities + offsets[rank], lengths[rank], MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY,
+        MPI_Gatherv(positions_local, local_len, MPI_POSITION, positions, lengths, offsets, MPI_POSITION,
                     0,
                     MPI_COMM_WORLD);
     }
+    // 收集速度信息
+    MPI_Gatherv(velocities_local, local_len, MPI_VELOCITY, velocities, lengths, offsets, MPI_VELOCITY,
+                0,
+                MPI_COMM_WORLD);
+
+    if (rank != 0) {
+        delete[] masses;
+        delete[] positions;
+    }
+    delete[] velocities_local;
 
     double end_time = MPI_Wtime();
     return end_time - start_time;
@@ -125,32 +141,36 @@ int main(int argc, char *argv[]) {
     double total_time = std::stod(argv[2]);
     double time_granularity = std::stod(argv[3]);
 
-    int s = (int) std::sqrt(body_num);
-
-    assert(s == std::sqrt(body_num));
-
-    auto masses = new double[body_num];
-    auto positions = new Position[body_num];
-    auto velocities = new Velocity[body_num];
-
-    for (int i = 0; i < body_num; ++i) {
-        masses[i] = 10000;
-        velocities[i].vx = 0;
-        velocities[i].vy = 0;
-    }
-
-    for (int i = 0; i < s; ++i) {
-        for (int j = 0; j < s; ++j) {
-            positions[i * s + j].x = i;
-            positions[i * s + j].y = j;
-        }
-    }
-
     MPI_Init(&argc, &argv);
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    double *masses = nullptr;
+    Position *positions = nullptr;
+    Velocity *velocities = nullptr;
+
+    if (rank == 0) {
+        masses = new double[body_num];
+        positions = new Position[body_num];
+        velocities = new Velocity[body_num];
+        for (int i = 0; i < body_num; ++i) {
+            masses[i] = 10000;
+            velocities[i].vx = 0;
+            velocities[i].vy = 0;
+        }
+        int s = (int) std::sqrt(body_num);
+        if (s != std::sqrt(body_num)) {
+            std::cerr << "body_num must be squired number" << std::endl;
+        }
+        for (int i = 0; i < s; ++i) {
+            for (int j = 0; j < s; ++j) {
+                positions[i * s + j].x = i;
+                positions[i * s + j].y = j;
+            }
+        }
+    }
 
     if (rank == 0) {
         std::cout << std::setiosflags(std::ios::fixed);
@@ -168,24 +188,26 @@ int main(int argc, char *argv[]) {
         // 输出到文件
         std::ofstream file;
         file.open(std::string("lab3_") + argv[1] + "_" + argv[2] + "_" + argv[3] + ".txt", std::ios::out);
-        file << "body_num = " << body_num << std::endl;
-        file << "total_time = " << total_time << std::endl;
-        file << "time_granularity = " << time_granularity << std::endl;
-        file << "mass\tposition\tvelocity" << std::endl;
+        file << "body_num = " << body_num << '\n';
+        file << "total_time = " << total_time << '\n';
+        file << "time_granularity = " << time_granularity << '\n';
+        file << "mass\tposition\tvelocity" << '\n';
         for (int i = 0; i < body_num; ++i) {
             file << masses[i] << '\t'
                  << '(' << positions[i].x << ',' << positions[i].y << ')' << '\t'
-                 << '(' << velocities[i].vx << ',' << velocities[i].vy << ')' << std::endl;
+                 << '(' << velocities[i].vx << ',' << velocities[i].vy << ')' << '\n';
         }
         file.flush();
         file.close();
     }
 
-    MPI_Finalize();
+    if (rank == 0) {
+        delete[] masses;
+        delete[] positions;
+        delete[] velocities;
+    }
 
-    delete[] masses;
-    delete[] positions;
-    delete[] velocities;
+    MPI_Finalize();
 
     return 0;
 }
