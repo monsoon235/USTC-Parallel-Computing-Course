@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-repeat_time: int = 50
+repeat_time: int = 20
 
 thread_num_list = [1, 2, 4, 8, 16, 32]
 
